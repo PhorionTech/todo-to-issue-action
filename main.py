@@ -57,7 +57,6 @@ class GitHubClient(object):
             'Content-Type': 'application/json',
             'Authorization': f'token {self.token}'
         }
-        self.pr_number - os.getenv('INPUT_PR')
         auto_p = os.getenv('INPUT_AUTO_P', 'true') == 'true'
         self.line_break = '\n\n' if auto_p else '\n'
         # Retrieve the existing repo issues now so we can easily check them later.
@@ -175,9 +174,10 @@ class GitHubClient(object):
         return new_issue_request.status_code
 
     def comment_todo_status(self, issue):
+         pr_number = os.getenv('PR')
          print (self.pr)
          title = issue.title
-         comment_url = f'{self.repos_url}{self.repo}/pull/{self.pr_number}'
+         comment_url = f'{self.repos_url}{self.repo}/pull/{pr_number}'
 
          print (comment_url)
          
