@@ -118,13 +118,13 @@ class GitHubClient(object):
 
         for comment in current_comments:
             if comment['user']['login'] == "github-actions[bot]" and "TODO Issues Created by This PR" in comment['body']:
-                output = comment['body'] + '\n- :red_circle: `{}` -> \n'.format(title)
+                output = comment['body'] + '\n- [ ] :red_circle: `{}` -> \n'.format(title)
                 output += url_to_line
                 r = requests.patch(comment['url'], headers=self.issue_headers, json={"body": output})
                 return (r.status_code)
 
         output = "## TODO Issues Created by This PR :ballot_box_with_check:\n\nThe following issues will be created as a result of `TODO:` tags within newly committed code:\n"
-        output += "\n- :red_circle: `{}` -> \n".format(title)
+        output += "\n- [ ] :red_circle: `{}` -> \n".format(title)
         output += url_to_line
         r = requests.post(comment_url, headers=self.issue_headers, json={"body": output})
          
@@ -140,7 +140,7 @@ class GitHubClient(object):
 
         for comment in current_comments:
             if comment['user']['login'] == "github-actions[bot]" and "TODO Issues Created by This PR" in comment['body']:
-                updated_body = comment['body'].replace(("\n- :red_circle: `{}` -> \n".format(title)), '')
+                updated_body = comment['body'].replace(("\n- [ ] :red_circle: `{}` -> \n".format(title)), '("\n- [x] :green_circle: [RESOLVED] `{}` -> \n".format(title))')
                 updated_body = updated_body.replace(url_to_line, '')
                 r = requests.patch(comment['url'], headers=self.issue_headers, json={"body": updated_body})
                 return (r.status_code)
