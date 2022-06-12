@@ -107,81 +107,23 @@ class GitHubClient(object):
             if 'next' in links:
                 self._get_existing_issues(page + 1)
 
-    def create_issue(self, issue):
-        """Create a dict containing the issue details and send it to GitHub."""
-        title = issue.title
-        if len(title) > 80:
-            # Title is too long.
-            title = title[:80] + '...'
-        formatted_issue_body = self.line_break.join(issue.body)
-        url_to_line = f'https://github.com/{self.repo}/blob/{self.sha}/{issue.file_name}#L{issue.start_line}'
-        snippet = '```' + issue.markdown_language + '\n' + issue.hunk + '\n' + '```'
-
-        issue_template = os.getenv('INPUT_ISSUE_TEMPLATE', None)
-        if issue_template:
-            issue_contents = (issue_template.replace('{{ title }}', issue.title)
-                              .replace('{{ body }}', formatted_issue_body)
-                              .replace('{{ url }}', url_to_line)
-                              .replace('{{ snippet }}', snippet)
-                              )
-        elif len(issue.body) != 0:
-            issue_contents = formatted_issue_body + '\n\n' + url_to_line + '\n\n' + snippet
-        else:
-            issue_contents = url_to_line + '\n\n' + snippet
-        # Check if the current issue already exists - if so, skip it.
-        # The below is a simple and imperfect check based on the issue title.
-        for existing_issue in self.existing_issues:
-            if issue.title == existing_issue['title']:
-                print(f'Skipping issue (already exists).')
-                return
-
-        new_issue_body = {'title': title, 'body': issue_contents, 'labels': issue.labels}
-
-        # We need to check if any assignees/milestone specified exist, otherwise issue creation will fail.
-        valid_assignees = []
-        if len(issue.assignees) == 0 and self.auto_assign:
-            valid_assignees.append(self.actor)
-        for assignee in issue.assignees:
-            assignee_url = f'{self.repos_url}{self.repo}/assignees/{assignee}'
-            assignee_request = requests.get(url=assignee_url, headers=self.issue_headers)
-            if assignee_request.status_code == 204:
-                valid_assignees.append(assignee)
-            else:
-                print(f'Assignee {assignee} does not exist! Dropping this assignee!')
-        new_issue_body['assignees'] = valid_assignees
-
-        if issue.milestone:
-            milestone_url = f'{self.repos_url}{self.repo}/milestones/{issue.milestone}'
-            milestone_request = requests.get(url=milestone_url, headers=self.issue_headers)
-            if milestone_request.status_code == 200:
-                new_issue_body['milestone'] = issue.milestone
-            else:
-                print(f'Milestone {issue.milestone} does not exist! Dropping this parameter!')
-
-        new_issue_request = requests.post(url=self.issues_url, headers=self.issue_headers,
-                                          data=json.dumps(new_issue_body))
-
-        # Check if we should assign this issue to any projects.
-        if new_issue_request.status_code == 201 and (len(issue.user_projects) > 0 or len(issue.org_projects) > 0):
-            issue_json = new_issue_request.json()
-            issue_id = issue_json['id']
-
-            if len(issue.user_projects) > 0:
-                self.add_issue_to_projects(issue_id, issue.user_projects, 'user')
-            if len(issue.org_projects) > 0:
-                self.add_issue_to_projects(issue_id, issue.org_projects, 'org')
-
-        return new_issue_request.status_code
-
     def comment_todo_status(self, issue):
-         pr_number = os.getenv('PR')
-         title = issue.title
-         comment_url = f'{self.repos_url}{self.repo}/issues/{pr_number}/comments'
 
-         print (pr_number)
+        pr_number = os.getenv('PR')
+        title = issue.title
+        comment_url = f'{self.repos_url}{self.repo}/issues/{pr_number}/comments'
 
-         r = requests.post(comment_url, headers=self.issue_headers, json={"body": title})
-         print (r.text)
+        current_comments = requests.get(comment_url, headers=self.issue_headers).json()
+
+        for comment in current_comments:
+            if comment['user']['login'] == "github-actions[bot]" and "TODO Issues Created by This PR" in comment['body']:
+                output = comment['body'] + '\n- :red_circle: `{}`'.format(title)
+                r = requests.patch(comment['url'], headers=self.issue_headers, json={"body": output})
+            else:
+                output = "## TODO Issues Created by This PR :ballot_box_with_check:\n\nThe following issues will be created as a result of `TODO:` tags within newly committed code:\n"
+                output += "'\n- :red_circle: `{}`'.format(title)"
+                r = requests.post(comment_url, headers=self.issue_headers, json={"body": title})
+        print (r.text)
          
     def close_issue(self, issue):
         """Check to see if this issue can be found on GitHub and if so close it."""
@@ -647,6 +589,7 @@ if __name__ == "__main__":
                       f'Assuming this issue has been moved so skipping.')
                 continue
             issues_to_process.extend(similar_issues)
+        
         # Cycle through the Issue objects and create or close a corresponding GitHub issue for each.
         for j, raw_issue in enumerate(issues_to_process):
             print(f'Processing issue {j + 1} of {len(issues_to_process)}')
