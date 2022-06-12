@@ -176,7 +176,7 @@ class GitHubClient(object):
     def comment_todo_status(self, issue):
          pr_number = os.getenv('PR')
          title = issue.title
-         comment_url = f'{self.repos_url}{self.repo}/pulls/{pr_number}/comments'
+         comment_url = f'{self.repos_url}{self.repo}/issues/{pr_number}/comments'
 
          print (pr_number)
 
