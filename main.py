@@ -127,33 +127,23 @@ class GitHubClient(object):
         output += "\n- :red_circle: `{}` -> \n".format(title)
         output += url_to_line
         r = requests.post(comment_url, headers=self.issue_headers, json={"body": output})
-        print (r.status_code)
          
     def close_issue(self, issue):
-        """Check to see if this issue can be found on GitHub and if so close it."""
-        matched = 0
-        issue_number = None
-        for existing_issue in self.existing_issues:
-            # This is admittedly a simple check that may not work in complex scenarios, but we can't deal with them yet.
-            if existing_issue['title'] == issue.title:
-                matched += 1
-                # If there are multiple issues with similar titles, don't try and close any.
-                if matched > 1:
-                    print(f'Skipping issue (multiple matches)')
-                    break
-                issue_number = existing_issue['number']
-        else:
-            # The titles match, so we will try and close the issue.
-            update_issue_url = f'{self.repos_url}{self.repo}/issues/{issue_number}'
-            body = {'state': 'closed'}
-            requests.patch(update_issue_url, headers=self.issue_headers, data=json.dumps(body))
 
-            issue_comment_url = f'{self.repos_url}{self.repo}/issues/{issue_number}/comments'
-            body = {'body': f'Closed in {self.sha}'}
-            update_issue_request = requests.post(issue_comment_url, headers=self.issue_headers,
-                                                 data=json.dumps(body))
-            return update_issue_request.status_code
-        return None
+        pr_number = os.getenv('PR')
+        title = issue.title
+        comment_url = f'{self.repos_url}{self.repo}/issues/{pr_number}/comments'
+        url_to_line = f'https://github.com/{self.repo}/blob/{self.sha}/{issue.file_name}#L{issue.start_line}'
+
+        current_comments = requests.get(comment_url, headers=self.issue_headers).json()
+
+        for comment in current_comments:
+            if comment['user']['login'] == "github-actions[bot]" and "TODO Issues Created by This PR" in comment['body']:
+                updated_body = comment['body'].replace(("\n- :red_circle: `{}` -> \n".format(title)), '')
+                updated_body = updated_body.replace(url_to_line, '')
+                r = requests.patch(comment['url'], headers=self.issue_headers, json={"body": updated_body})
+                return (r.status_code)
+        
 
     def add_issue_to_projects(self, issue_id, projects, projects_type):
         """Attempt to add this issue to the specified user or organisation projects."""
@@ -598,17 +588,16 @@ if __name__ == "__main__":
         for j, raw_issue in enumerate(issues_to_process):
             print(f'Processing issue {j + 1} of {len(issues_to_process)}')
             if raw_issue.status == LineStatus.ADDED:
-                # status_code = client.create_issue(raw_issue)
                 status_code = client.comment_todo_status(raw_issue)
-                if status_code == 201:
-                    print('Issue created')
+                if status_code == 200 or status_code== 201:
+                    print('Comment created/updated')
                 else:
-                    print('Issue could not be created')
+                    print('Issue could not be created/updated')
             elif raw_issue.status == LineStatus.DELETED and os.getenv('INPUT_CLOSE_ISSUES', 'true') == 'true':
                 status_code = client.close_issue(raw_issue)
-                if status_code == 201:
-                    print('Issue closed')
+                if status_code == 200 or status_code== 201:
+                    print('Comment updated')
                 else:
-                    print('Issue could not be closed')
+                    print('Comment could not be closed')
             # Stagger the requests to be on the safe side.
             sleep(1)
