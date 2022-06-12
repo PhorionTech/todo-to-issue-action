@@ -128,7 +128,7 @@ class GitHubClient(object):
         output += url_to_line
         r = requests.post(comment_url, headers=self.issue_headers, json={"body": output})
          
-    def close_issue(self, issue):
+    def close_comment_task(self, issue):
 
         pr_number = os.getenv('PR')
         title = issue.title
@@ -591,10 +591,10 @@ if __name__ == "__main__":
                 else:
                     print('Issue could not be created/updated')
             elif raw_issue.status == LineStatus.DELETED and os.getenv('INPUT_CLOSE_ISSUES', 'true') == 'true':
-                status_code = client.close_issue(raw_issue)
+                status_code = client.close_comment_task(raw_issue)
                 if status_code == 200 or status_code== 201:
                     print('Comment updated')
                 else:
                     print('Comment could not be closed')
             # Stagger the requests to be on the safe side.
-            sleep(1)
+            sleep(5)
