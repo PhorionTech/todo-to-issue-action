@@ -46,10 +46,6 @@ inputs:
     description: 'For multiline TODOs, format each line as a new paragraph when creating the issue'
     required: true
     default: true
-  PR:
-     description: 'The current PR number'
-     required: true
-     default: '${{ steps.findPr.outputs.pr }}'
   PROJECTS_SECRET:
     description: 'Encrypted secret corresponding to your personal access token (do not enter the actual secret)'
     required: false
