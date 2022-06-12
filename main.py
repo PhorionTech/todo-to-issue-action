@@ -133,15 +133,12 @@ class GitHubClient(object):
         pr_number = os.getenv('PR')
         title = issue.title
         comment_url = f'{self.repos_url}{self.repo}/issues/{pr_number}/comments'
-        url_to_line = f'https://github.com/{self.repo}/blob/{self.sha}/{issue.file_name}#L{issue.start_line}'
-        print (url_to_line)
 
         current_comments = requests.get(comment_url, headers=self.issue_headers).json()
 
         for comment in current_comments:
             if comment['user']['login'] == "github-actions[bot]" and "TODO Issues Created by This PR" in comment['body']:
                 updated_body = comment['body'].replace(("\n- [ ] :red_circle: `{}` -> \n".format(title)), ("\n- [x] :green_circle: [RESOLVED] `{}` -> \n".format(title)))
-                updated_body = updated_body.replace(url_to_line, '')
                 r = requests.patch(comment['url'], headers=self.issue_headers, json={"body": updated_body})
                 return (r.status_code)
         
