@@ -122,7 +122,7 @@ class GitHubClient(object):
             else:
                 output = "## TODO Issues Created by This PR :ballot_box_with_check:\n\nThe following issues will be created as a result of `TODO:` tags within newly committed code:\n"
                 output += "'\n- :red_circle: `{}`'.format(title)"
-                r = requests.post(comment_url, headers=self.issue_headers, json={"body": title})
+                r = requests.post(comment_url, headers=self.issue_headers, json={"body": output})
         print (r.text)
          
     def close_issue(self, issue):
