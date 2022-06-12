@@ -112,17 +112,21 @@ class GitHubClient(object):
         pr_number = os.getenv('PR')
         title = issue.title
         comment_url = f'{self.repos_url}{self.repo}/issues/{pr_number}/comments'
+        url_to_line = f'https://github.com/{self.repo}/blob/{self.sha}/{issue.file_name}#L{issue.start_line}'
 
         current_comments = requests.get(comment_url, headers=self.issue_headers).json()
 
         for comment in current_comments:
             if comment['user']['login'] == "github-actions[bot]" and "TODO Issues Created by This PR" in comment['body']:
-                output = comment['body'] + '\n- :red_circle: `{}`'.format(title)
+                output = comment['body'] + '\n- :red_circle: `{}` -> \n'.format(title)
+                output += url_to_line
                 r = requests.patch(comment['url'], headers=self.issue_headers, json={"body": output})
-            else:
-                output = "## TODO Issues Created by This PR :ballot_box_with_check:\n\nThe following issues will be created as a result of `TODO:` tags within newly committed code:\n"
-                output += "\n- :red_circle: `{}`".format(title)
-                r = requests.post(comment_url, headers=self.issue_headers, json={"body": output})
+                return (r.status_code)
+
+        output = "## TODO Issues Created by This PR :ballot_box_with_check:\n\nThe following issues will be created as a result of `TODO:` tags within newly committed code:\n"
+        output += "\n- :red_circle: `{}` -> \n".format(title)
+        output += url_to_line
+        r = requests.post(comment_url, headers=self.issue_headers, json={"body": output})
         print (r.status_code)
          
     def close_issue(self, issue):
