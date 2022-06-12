@@ -134,6 +134,7 @@ class GitHubClient(object):
         title = issue.title
         comment_url = f'{self.repos_url}{self.repo}/issues/{pr_number}/comments'
         url_to_line = f'https://github.com/{self.repo}/blob/{self.sha}/{issue.file_name}#L{issue.start_line}'
+        print (url_to_line)
 
         current_comments = requests.get(comment_url, headers=self.issue_headers).json()
 
