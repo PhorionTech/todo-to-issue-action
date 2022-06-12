@@ -178,7 +178,10 @@ class GitHubClient(object):
          title = issue.title
          comment_url = f'{self.repos_url}{self.repo}/pulls/{pr_number}/comments'
 
+         print (pr_number)
+
          r = requests.post(comment_url, headers=self.issue_headers, json={"body": title})
+         print (r.text)
          
     def close_issue(self, issue):
         """Check to see if this issue can be found on GitHub and if so close it."""
