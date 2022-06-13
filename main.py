@@ -95,6 +95,10 @@ class GitHubClient(object):
     def comment_todo_status(self, issue):
 
         pr_number = os.getenv('PR')
+
+        if not pr_number:
+            return
+
         title = issue.title
         comment_url = f'{self.repos_url}{self.repo}/issues/{pr_number}/comments'
         url_to_line = f'https://github.com/{self.repo}/blob/{self.sha}/{issue.file_name}#L{issue.start_line}'
@@ -116,6 +120,10 @@ class GitHubClient(object):
     def close_comment_task(self, issue):
 
         pr_number = os.getenv('PR')
+
+        if not pr_number:
+            return
+            
         title = issue.title
         comment_url = f'{self.repos_url}{self.repo}/issues/{pr_number}/comments'
 
