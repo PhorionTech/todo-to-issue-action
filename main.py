@@ -92,21 +92,6 @@ class GitHubClient(object):
             return diff_request.text
         raise Exception('Could not retrieve diff. Operation will abort.')
 
-    def _get_existing_issues(self, page=1):
-        """Populate the existing issues list."""
-        params = {
-            'per_page': 100,
-            'page': page,
-            'state': 'open',
-            'labels': 'todo'
-        }
-        list_issues_request = requests.get(self.issues_url, headers=self.issue_headers, params=params)
-        if list_issues_request.status_code == 200:
-            self.existing_issues.extend(list_issues_request.json())
-            links = list_issues_request.links
-            if 'next' in links:
-                self._get_existing_issues(page + 1)
-
     def comment_todo_status(self, issue):
 
         pr_number = os.getenv('PR')
@@ -141,82 +126,6 @@ class GitHubClient(object):
                 updated_body = comment['body'].replace(("\n- [ ] :red_circle: `{}` -> \n".format(title)), ("\n- [x] :green_circle: [RESOLVED] `{}` -> \n".format(title)))
                 r = requests.patch(comment['url'], headers=self.issue_headers, json={"body": updated_body})
                 return (r.status_code)
-        
-    def add_issue_to_projects(self, issue_id, projects, projects_type):
-        """Attempt to add this issue to the specified user or organisation projects."""
-        projects_secret = os.getenv('INPUT_PROJECTS_SECRET', None)
-        if not projects_secret:
-            print('You need to create and set PROJECTS_SECRET to use projects')
-            return
-        projects_headers = {
-            'Accept': 'application/vnd.github.inertia-preview+json',
-            'Authorization': f'token {projects_secret}'
-        }
-
-        # Loop through all the projects that we should assign this issue to.
-        for i, project in enumerate(projects):
-            print(f'Adding issue to {projects_type} project {i + 1} of {len(projects)}')
-            project = project.replace(' / ', '/')
-            try:
-                entity_name, project_name, column_name = project.split('/')
-            except ValueError:
-                print('Invalid project syntax')
-                continue
-            entity_name = entity_name.strip()
-            project_name = project_name.strip()
-            column_name = column_name.strip()
-
-            if projects_type == 'user':
-                projects_url = f'{self.base_url}users/{entity_name}/projects'
-            elif projects_type == 'org':
-                projects_url = f'{self.base_url}orgs/{entity_name}/projects'
-            else:
-                return
-
-            # We need to use the project name to get its ID.
-            projects_request = requests.get(url=projects_url, headers=projects_headers)
-            if projects_request.status_code == 200:
-                projects_json = projects_request.json()
-                for project_dict in projects_json:
-                    if project_dict['name'].lower() == project_name.lower():
-                        project_id = project_dict['id']
-                        break
-                else:
-                    print('Project does not exist, skipping')
-                    continue
-            else:
-                print('An error occurred, skipping')
-                continue
-
-            # Use the project ID and column name to get the column ID.
-            columns_url = f'{self.base_url}projects/{project_id}/columns'
-            columns_request = requests.get(url=columns_url, headers=projects_headers)
-            if columns_request.status_code == 200:
-                columns_json = columns_request.json()
-                for column_dict in columns_json:
-                    if column_dict['name'].lower() == column_name.lower():
-                        column_id = column_dict['id']
-                        break
-                else:
-                    print('Column does not exist, skipping')
-                    continue
-            else:
-                print('An error occurred, skipping')
-                continue
-
-            # Use the column ID to assign the issue to the project.
-            new_card_url = f'{self.base_url}projects/columns/{column_id}/cards'
-            new_card_body = {
-                'content_id': int(issue_id),
-                'content_type': 'Issue'
-            }
-            new_card_request = requests.post(url=new_card_url, headers=projects_headers,
-                                             data=json.dumps(new_card_body))
-            if new_card_request.status_code == 201:
-                print('Issue card added to project')
-            else:
-                print('Issue card could not be added to project')
-
 
 class TodoParser(object):
     """Parser for extracting information from a given diff file."""
