@@ -60,7 +60,6 @@ class GitHubClient(object):
         auto_p = os.getenv('INPUT_AUTO_P', 'true') == 'true'
         self.line_break = '\n\n' if auto_p else '\n'
         # Retrieve the existing repo issues now so we can easily check them later.
-        self._get_existing_issues()
         self.auto_assign = os.getenv('INPUT_AUTO_ASSIGN', 'false') == 'true'
         self.actor = os.getenv('INPUT_ACTOR')
 
@@ -123,7 +122,7 @@ class GitHubClient(object):
 
         if not pr_number:
             return
-            
+
         title = issue.title
         comment_url = f'{self.repos_url}{self.repo}/issues/{pr_number}/comments'
 
