@@ -57,11 +57,9 @@ class GitHubClient(object):
             'Content-Type': 'application/json',
             'Authorization': f'token {self.token}'
         }
-        self.pr_number - os.getenv('INPUT_PR')
         auto_p = os.getenv('INPUT_AUTO_P', 'true') == 'true'
         self.line_break = '\n\n' if auto_p else '\n'
         # Retrieve the existing repo issues now so we can easily check them later.
-        self._get_existing_issues()
         self.auto_assign = os.getenv('INPUT_AUTO_ASSIGN', 'false') == 'true'
         self.actor = os.getenv('INPUT_ACTOR')
 
@@ -93,195 +91,48 @@ class GitHubClient(object):
             return diff_request.text
         raise Exception('Could not retrieve diff. Operation will abort.')
 
-    def _get_existing_issues(self, page=1):
-        """Populate the existing issues list."""
-        params = {
-            'per_page': 100,
-            'page': page,
-            'state': 'open',
-            'labels': 'todo'
-        }
-        list_issues_request = requests.get(self.issues_url, headers=self.issue_headers, params=params)
-        if list_issues_request.status_code == 200:
-            self.existing_issues.extend(list_issues_request.json())
-            links = list_issues_request.links
-            if 'next' in links:
-                self._get_existing_issues(page + 1)
-
-    def create_issue(self, issue):
-        """Create a dict containing the issue details and send it to GitHub."""
-        title = issue.title
-        if len(title) > 80:
-            # Title is too long.
-            title = title[:80] + '...'
-        formatted_issue_body = self.line_break.join(issue.body)
-        url_to_line = f'https://github.com/{self.repo}/blob/{self.sha}/{issue.file_name}#L{issue.start_line}'
-        snippet = '```' + issue.markdown_language + '\n' + issue.hunk + '\n' + '```'
-
-        issue_template = os.getenv('INPUT_ISSUE_TEMPLATE', None)
-        if issue_template:
-            issue_contents = (issue_template.replace('{{ title }}', issue.title)
-                              .replace('{{ body }}', formatted_issue_body)
-                              .replace('{{ url }}', url_to_line)
-                              .replace('{{ snippet }}', snippet)
-                              )
-        elif len(issue.body) != 0:
-            issue_contents = formatted_issue_body + '\n\n' + url_to_line + '\n\n' + snippet
-        else:
-            issue_contents = url_to_line + '\n\n' + snippet
-        # Check if the current issue already exists - if so, skip it.
-        # The below is a simple and imperfect check based on the issue title.
-        for existing_issue in self.existing_issues:
-            if issue.title == existing_issue['title']:
-                print(f'Skipping issue (already exists).')
-                return
-
-        new_issue_body = {'title': title, 'body': issue_contents, 'labels': issue.labels}
-
-        # We need to check if any assignees/milestone specified exist, otherwise issue creation will fail.
-        valid_assignees = []
-        if len(issue.assignees) == 0 and self.auto_assign:
-            valid_assignees.append(self.actor)
-        for assignee in issue.assignees:
-            assignee_url = f'{self.repos_url}{self.repo}/assignees/{assignee}'
-            assignee_request = requests.get(url=assignee_url, headers=self.issue_headers)
-            if assignee_request.status_code == 204:
-                valid_assignees.append(assignee)
-            else:
-                print(f'Assignee {assignee} does not exist! Dropping this assignee!')
-        new_issue_body['assignees'] = valid_assignees
-
-        if issue.milestone:
-            milestone_url = f'{self.repos_url}{self.repo}/milestones/{issue.milestone}'
-            milestone_request = requests.get(url=milestone_url, headers=self.issue_headers)
-            if milestone_request.status_code == 200:
-                new_issue_body['milestone'] = issue.milestone
-            else:
-                print(f'Milestone {issue.milestone} does not exist! Dropping this parameter!')
-
-        new_issue_request = requests.post(url=self.issues_url, headers=self.issue_headers,
-                                          data=json.dumps(new_issue_body))
-
-        # Check if we should assign this issue to any projects.
-        if new_issue_request.status_code == 201 and (len(issue.user_projects) > 0 or len(issue.org_projects) > 0):
-            issue_json = new_issue_request.json()
-            issue_id = issue_json['id']
-
-            if len(issue.user_projects) > 0:
-                self.add_issue_to_projects(issue_id, issue.user_projects, 'user')
-            if len(issue.org_projects) > 0:
-                self.add_issue_to_projects(issue_id, issue.org_projects, 'org')
-
-        return new_issue_request.status_code
-
     def comment_todo_status(self, issue):
-         print (self.pr)
-         title = issue.title
-         comment_url = f'{self.repos_url}{self.repo}/pull/{self.pr_number}'
 
-         print (comment_url)
-         
-    def close_issue(self, issue):
-        """Check to see if this issue can be found on GitHub and if so close it."""
-        matched = 0
-        issue_number = None
-        for existing_issue in self.existing_issues:
-            # This is admittedly a simple check that may not work in complex scenarios, but we can't deal with them yet.
-            if existing_issue['title'] == issue.title:
-                matched += 1
-                # If there are multiple issues with similar titles, don't try and close any.
-                if matched > 1:
-                    print(f'Skipping issue (multiple matches)')
-                    break
-                issue_number = existing_issue['number']
-        else:
-            # The titles match, so we will try and close the issue.
-            update_issue_url = f'{self.repos_url}{self.repo}/issues/{issue_number}'
-            body = {'state': 'closed'}
-            requests.patch(update_issue_url, headers=self.issue_headers, data=json.dumps(body))
+        pr_number = os.getenv('PR')
 
-            issue_comment_url = f'{self.repos_url}{self.repo}/issues/{issue_number}/comments'
-            body = {'body': f'Closed in {self.sha}'}
-            update_issue_request = requests.post(issue_comment_url, headers=self.issue_headers,
-                                                 data=json.dumps(body))
-            return update_issue_request.status_code
-        return None
-
-    def add_issue_to_projects(self, issue_id, projects, projects_type):
-        """Attempt to add this issue to the specified user or organisation projects."""
-        projects_secret = os.getenv('INPUT_PROJECTS_SECRET', None)
-        if not projects_secret:
-            print('You need to create and set PROJECTS_SECRET to use projects')
+        if not pr_number:
             return
-        projects_headers = {
-            'Accept': 'application/vnd.github.inertia-preview+json',
-            'Authorization': f'token {projects_secret}'
-        }
 
-        # Loop through all the projects that we should assign this issue to.
-        for i, project in enumerate(projects):
-            print(f'Adding issue to {projects_type} project {i + 1} of {len(projects)}')
-            project = project.replace(' / ', '/')
-            try:
-                entity_name, project_name, column_name = project.split('/')
-            except ValueError:
-                print('Invalid project syntax')
-                continue
-            entity_name = entity_name.strip()
-            project_name = project_name.strip()
-            column_name = column_name.strip()
+        title = issue.title
+        comment_url = f'{self.repos_url}{self.repo}/issues/{pr_number}/comments'
+        url_to_line = f'https://github.com/{self.repo}/blob/{self.sha}/{issue.file_name}#L{issue.start_line}'
 
-            if projects_type == 'user':
-                projects_url = f'{self.base_url}users/{entity_name}/projects'
-            elif projects_type == 'org':
-                projects_url = f'{self.base_url}orgs/{entity_name}/projects'
-            else:
-                return
+        current_comments = requests.get(comment_url, headers=self.issue_headers).json()
 
-            # We need to use the project name to get its ID.
-            projects_request = requests.get(url=projects_url, headers=projects_headers)
-            if projects_request.status_code == 200:
-                projects_json = projects_request.json()
-                for project_dict in projects_json:
-                    if project_dict['name'].lower() == project_name.lower():
-                        project_id = project_dict['id']
-                        break
-                else:
-                    print('Project does not exist, skipping')
-                    continue
-            else:
-                print('An error occurred, skipping')
-                continue
+        for comment in current_comments:
+            if comment['user']['login'] == "github-actions[bot]" and "TODO Issues Created by This PR" in comment['body']:
+                output = comment['body'] + '\n- [ ] :red_circle: `{}` -> \n'.format(title)
+                output += url_to_line
+                r = requests.patch(comment['url'], headers=self.issue_headers, json={"body": output})
+                return (r.status_code)
 
-            # Use the project ID and column name to get the column ID.
-            columns_url = f'{self.base_url}projects/{project_id}/columns'
-            columns_request = requests.get(url=columns_url, headers=projects_headers)
-            if columns_request.status_code == 200:
-                columns_json = columns_request.json()
-                for column_dict in columns_json:
-                    if column_dict['name'].lower() == column_name.lower():
-                        column_id = column_dict['id']
-                        break
-                else:
-                    print('Column does not exist, skipping')
-                    continue
-            else:
-                print('An error occurred, skipping')
-                continue
+        output = "## TODO Issues Created by This PR :ballot_box_with_check:\n\nThe following issues will be created as a result of `TODO:` tags within newly committed code:\n"
+        output += "\n- [ ] :red_circle: `{}` -> \n".format(title)
+        output += url_to_line
+        r = requests.post(comment_url, headers=self.issue_headers, json={"body": output})
+         
+    def close_comment_task(self, issue):
 
-            # Use the column ID to assign the issue to the project.
-            new_card_url = f'{self.base_url}projects/columns/{column_id}/cards'
-            new_card_body = {
-                'content_id': int(issue_id),
-                'content_type': 'Issue'
-            }
-            new_card_request = requests.post(url=new_card_url, headers=projects_headers,
-                                             data=json.dumps(new_card_body))
-            if new_card_request.status_code == 201:
-                print('Issue card added to project')
-            else:
-                print('Issue card could not be added to project')
+        pr_number = os.getenv('PR')
 
+        if not pr_number:
+            return
+
+        title = issue.title
+        comment_url = f'{self.repos_url}{self.repo}/issues/{pr_number}/comments'
+
+        current_comments = requests.get(comment_url, headers=self.issue_headers).json()
+
+        for comment in current_comments:
+            if comment['user']['login'] == "github-actions[bot]" and "TODO Issues Created by This PR" in comment['body']:
+                updated_body = comment['body'].replace(("\n- [ ] :red_circle: `{}` -> \n".format(title)), ("\n- [x] :green_circle: [RESOLVED] `{}` -> \n".format(title)))
+                r = requests.patch(comment['url'], headers=self.issue_headers, json={"body": updated_body})
+                return (r.status_code)
 
 class TodoParser(object):
     """Parser for extracting information from a given diff file."""
@@ -645,21 +496,21 @@ if __name__ == "__main__":
                       f'Assuming this issue has been moved so skipping.')
                 continue
             issues_to_process.extend(similar_issues)
+        
         # Cycle through the Issue objects and create or close a corresponding GitHub issue for each.
         for j, raw_issue in enumerate(issues_to_process):
             print(f'Processing issue {j + 1} of {len(issues_to_process)}')
             if raw_issue.status == LineStatus.ADDED:
-                # status_code = client.create_issue(raw_issue)
                 status_code = client.comment_todo_status(raw_issue)
-                if status_code == 201:
-                    print('Issue created')
+                if status_code == 200 or status_code== 201:
+                    print('Comment created/updated')
                 else:
-                    print('Issue could not be created')
+                    print('Issue could not be created/updated')
             elif raw_issue.status == LineStatus.DELETED and os.getenv('INPUT_CLOSE_ISSUES', 'true') == 'true':
-                status_code = client.close_issue(raw_issue)
-                if status_code == 201:
-                    print('Issue closed')
+                status_code = client.close_comment_task(raw_issue)
+                if status_code == 200 or status_code== 201:
+                    print('Comment updated')
                 else:
-                    print('Issue could not be closed')
+                    print('Comment could not be closed')
             # Stagger the requests to be on the safe side.
-            sleep(1)
+            sleep(5)
