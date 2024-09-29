@@ -7,8 +7,8 @@ RUN pip install --target=/app -U pip setuptools wheel
 RUN pip install --target=/app ruamel.yaml
 RUN pip install --target=/app importlib-metadata
 
-FROM gcr.io/distroless/python3-debian10
+FROM python:3-slim
 COPY --from=builder /app /app
 WORKDIR /app
 ENV PYTHONPATH /app
-CMD ["/app/main.py"]
+CMD ["python", "/app/main.py"]
